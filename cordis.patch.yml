@@ -1,0 +1,10 @@
+# Profile patch layer shipped by dsh-plugin-provider-disable itself: installing
+# this package as a profile dependency (it declares `dsh.bundle`) appends this
+# layer automatically, mounting the host listener and serving the client half.
+#
+# The layer lands after dsh-base; the `connection` and `llm` services arrive
+# later still (web-app bundle layers), so route registration and provider
+# enumeration use ctx.inject / ctx.get guards rather than hard injects.
+- insert:
+    - id: plugin-provider-disable
+      name: dsh-plugin-provider-disable
