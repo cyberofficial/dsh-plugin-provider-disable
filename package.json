@@ -4,7 +4,6 @@
   "private": true,
   "description": "Disable an entire provider (model set) without deleting it: requests to disabled providers are rejected, and their models are grayed out in the model picker",
   "type": "module",
-  "license": "MIT",
   "main": "lib/index.js",
   "exports": {
     ".": {
