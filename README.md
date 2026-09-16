@@ -7,6 +7,9 @@ and settings survive untouched; flipping the toggle back restores everything.
 
 A normal, permanently-installed DSH plugin with a host half and a browser half.
 
+<img width="1574" height="176" alt="SmartSelect_20260916_190019_Chrome" src="https://github.com/user-attachments/assets/c24e8d11-c2de-4f93-8666-8b642a2c6950" />
+
+
 ## Why it exists
 
 Settings → Models can add, edit, and delete providers, but there is no way to
