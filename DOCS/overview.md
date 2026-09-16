@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **dsh-plugin-provider-disable** plugin provides a mechanism to disable entire DeepSeek or Nvidia model providers within the DSH (DeepSeek Harness) web UI. Once disabled, all requests to the disabled provider are rejected at the host level, and the model picker groups are visually grayed out to indicate they are unavailable.
+The **dsh-plugin-provider-disable** plugin provides a mechanism to turn any model provider within the DSH (DeepSeek Harness) web UI off. Once disabled, all requests to the disabled provider are rejected at the host level, and the model picker groups are visually grayed out to indicate they are unavailable.
 
 This plugin is useful for:
 
@@ -19,7 +19,7 @@ This plugin is useful for:
 | **Host Enforcement** | The DSH server host intercepts all outbound API requests and rejects those targeting disabled providers with a `ProviderDisabledError` |
 | **Client Graying** | The browser UI uses a `MutationObserver` + stylesheet to gray out model picker groups and shows an enable toggle in Settings → Models |
 | **State Persistence** | Disable state survives restarts — stored in `$DSH_HOME/provider-disable.json` |
-| **Cordis Integration** | Plugin declares `ctx.inject(['slots'])` and `ctx.inject(['connection'])` for proper initialization and route registration |
+| **Cordis Integration** | The client waits for the `slots` service (`exports.inject = ['slots']`) and the host registers routes through `ctx.inject(['connection'], cb)` |
 
 ### How It Works
 
@@ -50,9 +50,9 @@ dsh-plugin-provider-disable/
 │   ├── state.js              # ProviderDisableStore: resolveHome, normalizeState, setDisabled, atomic file writes
 │   └── client.js             # Client: fetchState, setProviderDisabled, ProviderToggle, MutationObserver, inject ['slots']
 ├── test/
-│   ├── state.test.mjs        # 5 tests: normalizeState, setDisabled, roundtrip, resolveHome
-│   ├── reject.test.mjs       # 3 tests: enabled passes, disabled throws, describeProviders
-│   └── client.test.mjs       # 4 tests: inject declaration, toggles, enable button, picker graying
+│   ├── state.test.mjs        # store: normalization, persistence roundtrip, home resolution
+│   ├── reject.test.mjs       # enforcement: enabled passthrough, disabled throw, provider join, toggle validation
+│   └── client.test.mjs       # client: inject declaration, state fetch, picker marking, late groups, suffix disambiguation
 ├── README.md                 # Install: `dsh plugin --profile web add "link:$PWD"`
 └── DOCS/                     # ← This folder
     ├── overview.md           # This file
@@ -66,11 +66,11 @@ dsh-plugin-provider-disable/
 
 | Limit | Detail |
 |-------|--------|
-| **Provider IDs** | Must match the *configurable directory* format (e.g., `deepseek-official`, `nvidia`). Underscore/hyphen parsing was fixed via `endsWith()` matching against the disabled set. |
+| **Provider IDs** | The id is the provider route id (e.g., `deepseek-official`, `nvidia`). The picker matcher takes the longest `-`-suffix among all known ids, so `openai` and `azure-openai` never cross-match. |
 | **Max Providers** | No hard limit on number of disabled providers, but the UI shows one toggle per provider namespace in Settings → Models. |
-| **State File** | Located at `$DSH_HOME/provider-disable.json`. If the `$DSH_HOME` directory doesn't exist, the store resolves it relative to the plugin root. |
+| **State File** | Located at `$DSH_HOME/provider-disable.json` — `$DSH_HOME` when set, else `~/.dsh`. |
 | **Restart Required** | After editing the state file or the plugin source, restart `dsh web` for changes to take effect (bundle layer reload). |
-| **One-shot runs** | `dsh --profile <name> "<task>"` also honors the disabled set via the same host listener, but only for the duration of that run. |
+| **One-shot runs** | `dsh --profile <name> "<task>"` honors the disabled set through the same host listener while that run executes. |
 | **Cordis guard** | Route registration **must** use `ctx.inject(['connection'], cb)` — using outer `ctx.connection` was rejected and never registered the route. |
 | **Client inject** | Client **must** declare `exports.inject = ['slots']` and use `ctx.get('slots')` with a guard — without it, toggles could silently never register when the renderer hasn't provided the slots service yet. |
 | **Picker graying** | Uses `data-provider-disable-off` attribute + CSS; host enforcement is the actual security boundary. Client graying is cosmetic only. |
@@ -78,7 +78,7 @@ dsh-plugin-provider-disable/
 
 ### Development Notes
 
-- Plugin is installed via: `dsh plugin --profile web add "link:D:/github/dsh-plugins/dsh-plugin-provider-disable"`
-- Source edits are picked up on `d web` restart (linked source profile)
-- All 17 tests pass (8+5+4): state store, rejection, and client UI smoke tests
+- Plugin is installed via `dsh plugin --profile web install "link:$PWD"` from the plugin directory
+- Source edits are picked up on the next `dsh web` restart (linked source profile)
+- `npm test` runs the state, reject, and client suites
 - The plugin is **self-contained** — no external dependencies beyond DSH core (cordis, react, etc. provided by the host)

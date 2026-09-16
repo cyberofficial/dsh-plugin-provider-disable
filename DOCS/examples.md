@@ -2,203 +2,141 @@
 
 ## Example State File ($DSH_HOME/provider-disable.json)
 
-### Minimal Example — No Providers Disabled
+The state document holds one `disabled` array of provider route ids plus an
+`updatedAt` timestamp.
+
+### Minimal Example — Nothing Disabled
 
 ```json
 {
-  "providers": {}
+  "disabled": [],
+  "updatedAt": null
 }
 ```
 
-**Description**: Default state when the plugin is first installed — no providers are disabled.
-
----
+**Description**: The default state — nothing is switched off. Every provider's
+models stay in the picker and every request proceeds normally.
 
 ### Example 1 — Disable DeepSeek Only
 
 ```json
 {
-  "providers": {
-    "deepseek-official": true
-  }
+  "disabled": ["deepseek-official"],
+  "updatedAt": "2026-01-01T00:00:00.000Z"
 }
 ```
 
-**Description**: Only the DeepSeek provider (`llm-deepseek`) is disabled.
-- Picker group for DeepSeek will be grayed out
-- Requests to DeepSeek functions will throw `ProviderDisabledError`
-- Nvidia and other providers remain fully functional
+**Description**: Only the DeepSeek provider is switched off.
 
----
+- The DeepSeek group is hidden from the model picker
+- Requests that resolve to it are rejected with `ProviderDisabledError`
+- Every other provider remains fully functional
 
-### Example 2 — Disable DeepSeek and Nvidia (Verified Configuration)
+### Example 2 — Disable Several Providers
 
 ```json
 {
-  "providers": {
-    "deepseek-official": true,
-    "nvidia": true
-  }
+  "disabled": ["deepseek-official", "nvidia"],
+  "updatedAt": "2026-01-01T00:00:00.000Z"
 }
 ```
 
-**Description**: Both DeepSeek and Nvidia providers are disabled.
-- This configuration was verified during plugin testing (ports 3181-3184)
-- Both picker groups are grayed in the UI
-- Host enforcement blocks requests to either provider
-- State persists across `dsh web` restarts
+**Description**: Two providers off at once. Add ids as needed; omitting a
+provider (or removing its id) enables it.
 
-**Note**: Provider IDs follow the pattern `<provider-key>-<official-name>`:
-- `deepseek-official` corresponds to the DeepSeek/Llm-DeepSeek provider
-- `nvidia` corresponds to the Nvidia/Llm-pi-AI provider
-
----
-
-### Example 3 — Disable All Providers
+### Example 3 — Re-enable a Provider
 
 ```json
 {
-  "providers": {
-    "deepseek-official": true,
-    "nvidia": true,
-    "ollama-local": true
-  }
+  "disabled": ["nvidia"],
+  "updatedAt": "2026-01-01T00:00:00.000Z"
 }
 ```
 
-**Description**: Disable multiple providers at once.
-- Add additional provider IDs as needed
-- Each key follows the `<provider>-<official>` naming convention
-- Omitted providers remain enabled
+**Description**: After disabling both, this keeps only Nvidia off —
+`deepseek-official` was removed from the array, which re-enables it. The
+Settings UI does the same thing with its toggle.
 
----
-
-### Example 4 — Enable After Disabling (Remove from Disabled Set)
+### Example 4 — Unknown id Kept
 
 ```json
 {
-  "providers": {
-    "nvidia": true
-  }
+  "disabled": ["ollama-local"],
+  "updatedAt": "2026-01-01T00:00:00.000Z"
 }
 ```
 
-**Description**: After previously disabling both DeepSeek and Nvidia, this keeps only Nvidia disabled.
-- `deepseek-official` is removed from the disabled set (re-enabled)
-- Only `nvidia` remains disabled
-- State was edited manually; could also be done via the Settings UI
+**Description**: Even when the profile no longer defines `ollama-local`, the id
+stays recorded. Re-adding a provider under the same id restores its toggle — the
+state is never silently pruned.
 
----
+## Provider IDs
 
-## Example Provider IDs
+The id is the **provider route id** — the same id `llm.listProviders()`
+reports. Some carry a display suffix (`deepseek-official`, `ollama-local`),
+others are bare (`nvidia`). You can list the ids the host currently sees with:
 
-### Format
-
-```
-<provider-key>-<official-display-name>
-```
-
-Where:
-- **provider-key**: The internal key identifying the provider type (e.g., `deepseek`, `nvidia`, `ollama`)
-- **official-display-name**: The user-facing name, often with hyphen suffix
-- **Separator**: Always a single hyphen `-` between provider key and official name
-
-### Common Examples
-
-| Provider Key | Display Name | Full Provider ID |
-|-------------|-------------|------------------|
-| `deepseek` | `official` | `deepseek-official` |
-| `nvidia` | (bare name) | `nvidia` |
-| `ollama` | `local` | `ollama-local` |
-| `openai` | `gpt-4` | `openai-gpt-4` *(if configured)* |
-| `anthropic` | `claude` | `anthropic-claude`*(if configured)* |
-
-### ID Matching Behavior
-
-The client-side picker graying uses `providerId.endsWith(`-\${disabledId}`)` to match:
-
-- `deepseek-official`.endsWith(`-official`) → **true** ✓
-- `nvidia`.endsWith(`-nvidia`) → **true** ✓ (bare name still matches via endsWith)
-- `ollama-local`.endsWith(`-local`) → **true** ✓
-- `deepseek-official`.endsWith(`-offical`) → **false** ✓ (typo doesn't match)
-
-**Important**: The `endsWith()` check means:
-- A provider ID `deepseek-official` will match the suffix `-official`
-- A provider ID `nvidia` (no hyphen) will match the suffix `-nvidia` since `nvidia`.endsWith(`-nvidia`) is... wait, let me reconsider.
-
-Actually, `nvidia`.endsWith(`-nvidia`) would be **false** because the string `nvidia` doesn't end with `-nvidia` (there's no leading hyphen).
-
-Let me re-check the documentation from the original build:
-
-> **Bug: suffix parsing of provider ids** — `lastIndexOf('-')` failed for hyphenated ids like `deepseek-official`; fixed via `endsWith(`-\${id}`)` matching against disabled set
-
-So the fix uses `endsWith(`-\${id}`)` where `id` is the disabled provider identifier. This means:
-
-- If disabling `deepseek-official`, the check is `providerId.endsWith(`-deepseek-official`)`
-- This would match any provider group whose ID ends with `-deepseek-official`
-
-And from the code/features:
-
-> Client picker graying uses `data-provider-disable-off` attribute + CSS; host enforcement is the actual security boundary
-
-And:
-
-> Client half `inject: ['slots']` ensures Loader waits for renderer before applying; without it toggles could silently never register
-
-Looking at the test file `client.test.mjs` mention of "grays picker group with hyphenated ids (e.g., deepseek-official)" - this suggests the IDs themselves are hyphenated like `deepseek-official`.
-
-The matching logic `endsWith(`-\${id}`)` means: if the disabled ID is `deepseek-official`, it checks `providerId.endsWith(`-deepseek-official`)`. This would match a provider group with ID like `some-deepseek-official` or possibly just `deepseek-official` depending on the exact implementation.
-
-For the examples, I'll stick with the IDs as they were verified during testing: `deepseek-official` and `nvidia`.
-
----
-
-## Example: Full Workflow
-
-### Step 1: Check Current State
-
-```powershell
-# Via the API (conceptual)
-# GET /api/plugins/provider-disable/state
-# Returns: {"providers": {}}
+```sh
+curl -s http://127.0.0.1:3080/api/plugins/provider-disable/state | node -e "
+  let raw = '';
+  process.stdin.on('data', (chunk) => (raw += chunk));
+  process.stdin.on('end', () => {
+    const state = JSON.parse(raw);
+    for (const provider of state.providers) {
+      console.log(`${provider.id}  disabled=${provider.disabled}  ns=${provider.settingsNs}`);
+    }
+  });
+"
 ```
 
-### Step 2: Disable DeepSeek via Settings UI
+## ID Matching in the Picker
 
-1. Open DSH web GUI
-2. Go to **Settings → Models**
-3. Toggle off the `deepseek-official` switch
-4. State automatically updates `$DSH_HOME/provider-disable.json`
+Group-heading ids look like `:r8q:-deepseek-official` — a React `useId`
+prefix, then the provider id. The matcher takes the **longest** `-`-suffix
+among the known provider ids, so ids that end with one another cannot
+cross-match:
 
-### Step 3: Verify State File
+- `:r8q:-nvidia` disabled + `:r1a:-azure-openai` enabled with `openai` also
+  disabled → only the `nvidia` group is hidden; `azure-openai` matches its own
+  longer id and stays visible
+- A typo'd id (`-offical`) matches nothing
+
+## Full Workflow
+
+### Step 1: Read the current state
+
+```sh
+curl -s http://127.0.0.1:3080/api/plugins/provider-disable/state
+```
+
+### Step 2: Disable a provider
+
+In **Settings → Models**, press `Disable provider` on its card. One click is
+one `POST`:
+
+```sh
+curl -s -X POST http://127.0.0.1:3080/api/plugins/provider-disable/state \
+  -H 'content-type: application/json' \
+  -d '{"provider":"nvidia","disabled":true}'
+```
+
+### Step 3: Verify the state file
 
 ```json
 {
-  "providers": {
-    "deepseek-official": true
-  }
+  "disabled": ["nvidia"],
+  "updatedAt": "2026-01-01T00:00:00.000Z"
 }
 ```
 
-### Step 4: Observe Picker Graying
+### Step 4: Observe the picker
 
-- The DeepSeek group in the model picker now has `data-provider-disable-off` attribute
-- CSS makes it visually distinct (grayed out)
-- Attempting to select DeepSeek model will be blocked at the host level
+- The Nvidia group now carries `data-provider-disable-off` and is hidden
+  (`display: none`) from the model picker
+- The graying is cosmetic: the host listener is what actually rejects requests
 
-### Step 5: Test Request Rejection
+### Step 5: Re-enable
 
-Make a request that would use DeepSeek:
-
-```powershell
-# This should throw ProviderDisabledError
-dsh some-task --provider deepseek-official
-# Error: Provider "deepseek-official" is disabled. 
-# Disable it via Settings → Models or edit $DSH_HOME/provider-disable.json
-```
-
-### Step 6: Re-enable via UI or JSON
-
-1. Toggle the switch back on in Settings, OR
-2. Edit the JSON to remove `deepseek-official` from the providers object
-3. State updates immediately
+Toggle the card back in Settings, `POST {"provider":"nvidia","disabled":false}`,
+or remove the id from the array by hand. Hand edits are read on the next
+`dsh web` restart.

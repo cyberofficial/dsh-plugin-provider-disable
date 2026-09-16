@@ -30,44 +30,41 @@
 When a provider is disabled, its group in the model picker is grayed out using:
 
 - **HTML attribute**: `data-provider-disable-off` set on the provider group element
-- **CSS styling**: Targets `[data-provider-disable-off]` with reduced opacity/color
-- **Identifier matching**: Uses `endsWith('-' + id)` to match hyphenated provider IDs (e.g., `deepseek-official` matches because it ends with `-official`)
+- **CSS styling**: `section[data-provider-disable-off] { display: none; }` — the group is hidden, not dimmed
+- **Identifier matching**: the longest `-`-suffix among the known provider ids; hidden only when that id is disabled
 
 ### How It Works
 
-1. When state changes, client broadcasts the new disabled set
-2. Renderer reads the disabled set and sets `data-provider-disable-off` on matching provider groups
-3. CSS automatically applies the grayed appearance
-4. The matching uses `providerId.endsWith(`-\${id}`)` against the configured disabled set
+1. The client keeps one cached snapshot from `GET /api/plugins/provider-disable/state`
+2. A debounced MutationObserver re-marks every `[role="menu"] section[role="group"][aria-labelledby]` whose heading id ends with a disabled provider id (longest suffix wins)
+3. The stylesheet wakes `display: none` for marked groups the moment it is appended
 
 ### Example
 
-If `deepseek-official` is disabled:
-- The picker group with id `deepseek-official` gets `data-provider-disable-off` attribute
-- CSS makes that group visually distinct (grayed out)
-- The matching works because `deepseek-official`.endsWith(`-official`) is true
+For a group heading `:r8q:-deepseek-official` while `deepseek-official` is disabled:
+- The longest suffix match resolves that group to the disabled id
+- The section gets `data-provider-disable-off="true"` and `display: none`
+- An enabled `azure-openai` group is not hidden even though `openai` is disabled — the longer id wins
 
 ## State Persistence
 
 ### Where State Is Stored
 
-- File: `$DSH_HOME/provider-disable.json`
+- File: `$DSH_HOME/provider-disable.json` — `$DSH_HOME` when set, else `~/.dsh`
 - Example path: `C:\Users\[your-user]\.dsh\provider-disable.json` (or `$HOME/.dsh/provider-disable.json` on Linux/macOS)
 
 ### File Format
 
 ```json
 {
-  "providers": {
-    "deepseek-official": true,
-    "nvidia": true
-  }
+  "disabled": ["deepseek-official", "nvidia"],
+  "updatedAt": "2026-01-01T00:00:00.000Z"
 }
 ```
 
-- `providers`: Object mapping provider IDs to `true` (enabled/disabled status)
-- Each key is a provider ID following the `<provider>-<official-name>` pattern
-- Values are always `true` (existence in the set means disabled; absence means enabled)
+- `disabled`: array of provider route ids currently switched off
+- Unknown ids are kept, so re-adding a provider under the same id restores its toggle
+- `updatedAt`: ISO timestamp of the last change, or `null` before any change
 
 ### State Survival Across Restarts
 
@@ -80,22 +77,20 @@ If `deepseek-official` is disabled:
 If you prefer to edit the JSON directly:
 
 1. Open `$DSH_HOME/provider-disable.json` in any text editor
-2. Add or remove provider IDs in the `providers` object
+2. Add or remove provider ids in the `disabled` array
 3. Save the file
-4. Restart `dsh web` to pick up changes (or they may take effect immediately)
+4. Restart `dsh web` to pick up changes — the host reads the file at startup and assumes it is the one writer
 
 ### Example: Fully Disabling DeepSeek and Nvidia
 
 ```json
 {
-  "providers": {
-    "deepseek-official": true,
-    "nvidia": true
-  }
+  "disabled": ["deepseek-official", "nvidia"],
+  "updatedAt": "2026-01-01T00:00:00.000Z"
 }
 ```
 
-This disables both the DeepSeek and Nvidia providers entirely.
+This turns both providers off entirely.
 
 ## One-Shot Runs
 
@@ -112,13 +107,13 @@ Even in one-shot mode, if a disabled provider is encountered, the request will b
 | Limit | Description |
 |-------|-------------|
 | **Provider-level only** | Only entire providers can be disabled, not individual models |
-| **Hyphenated IDs** | Provider IDs using hyphens (e.g., `deepseek-official`) are supported; suffix parsing was fixed via `endsWith()` |
+| **Hyphenated IDs** | Ids with hyphens (`deepseek-official`) work; the matcher uses the longest `-`-suffix, so `openai` vs `azure-openai` cannot cross-match |
 | **No model-level control** | Cannot disable specific models within a provider |
 | **CSS graying only** | Visual graying is client-side; host enforcement is the actual security boundary |
 | **Slots dependency** | Client toggles require `exports.inject = ['slots']` to wait for the renderer |
 | **Cordis guard** | Host must use `ctx.inject(['connection'], cb)` — outer `ctx.connection` is rejected |
-| **State format** | JSON must have `providers` object with provider ID keys; other formats may cause errors |
-| **Restart required** | Some changes require `dsh web` restart for full effect (especially new provider IDs) |
+| **State format** | JSON must have a `disabled` array of ids; unreadable or corrupt files degrade to the empty state (no crash at boot) |
+| **Restart required** | Hand edits to the state file are read on the next `dsh web` restart; UI toggles take effect immediately |
 | **One-shot honored** | `dsh --profile <name> "<task>"` respects the disabled set via the same host listener |
 
 ## Troubleshooting
