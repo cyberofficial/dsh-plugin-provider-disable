@@ -1,7 +1,7 @@
 # dsh-plugin-provider-disable
 
-Turn a whole provider (a "model set") off without deleting it. Its models gray
-out in the composer's model picker, and the host rejects any request that still
+Turn a whole provider (a "model set") off without deleting it. Its models
+disappear from the composer's model picker, and the host rejects any request that still
 targets it — stored session routes and subagents included. API keys, endpoints,
 and settings survive untouched; flipping the toggle back restores everything.
 
@@ -19,8 +19,8 @@ picklist and stale sessions keep reaching for it.
 - **Settings → Models**: every provider card gains a `Disable provider` /
   `Enable provider` button (registered through the `settings.models.provider-card`
   extension slot — no harness files are patched).
-- **Model picker**: a disabled provider's group is dimmed, labeled
-  `(disabled)`, and its rows stop responding to the mouse and pointer.
+- **Model picker**: a disabled provider's model group is hidden
+  (`display:none`) from the composer dropdown, so its rows can't be chosen.
 - **Enforcement**: a host listener on the `agent/request` waterfall inspects
   the fully-resolved provider/model and throws before the adapter is prepared,
   so the request never leaves the machine. The turn fails with a message naming
@@ -57,7 +57,7 @@ then reload the page. Both the host route and the browser bundle ship built in
 | Enforcement | `lib/index.js` → `agent/request` | Throws `ProviderDisabledError` for a disabled provider |
 | State API | `lib/index.js` → `GET/POST /api/plugins/provider-disable/state` | Exact fetch route on the shared `/api` channel (already trust- and auth-fenced) |
 | Settings toggles | `lib/client.js` → `settings.models.provider-card` | One keyed entry per settings namespace |
-| Picker graying | `lib/client.js` → MutationObserver + `<style>` | Marks each `[role="group"]` section for a disabled provider |
+| Picker hiding | `lib/client.js` → MutationObserver + `<style>` | Marks each `[role="group"]` section for a disabled provider so the stylesheet hides it |
 
 The provider list comes from the host (`llm.listProviders()` joined with
 `llm.listConfigurableProviders()`), so a provider added later appears in the
@@ -71,8 +71,8 @@ toggle list on the next state refresh — no plugin update required.
   with the rejection message until you re-enable it or select another model —
   deliberate, so a stale session cannot silently burn a provider you switched
   off.
-- **The picker graying is cosmetic-plus.** It blocks clicks and marks the rows
-  `aria-disabled`; it is not the security boundary. The host listener is.
+- **The picker hiding is cosmetic-plus.** It removes a disabled provider's group
+  from view; it is not the security boundary. The host listener is.
 - **Provider list changes need a refresh cycle.** When you add a provider while
   the plugin is running, its card toggle appears after the next state fetch
   (opening the picker or the Models page triggers one).
