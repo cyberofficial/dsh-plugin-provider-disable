@@ -1,8 +1,8 @@
 /** State store tests: normalization, toggles, persistence, corruption. */
 import assert from 'node:assert/strict'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { homedir, tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { describe, it } from 'node:test'
 import {
   ProviderDisableStore,
@@ -75,9 +75,22 @@ describe('ProviderDisableStore', () => {
 })
 
 describe('resolveHome', () => {
-  it('prefers DSH_HOME and falls back to ~/.dsh', () => {
-    assert.equal(resolveHome({ DSH_HOME: '/x/dsh' }), '/x/dsh')
-    assert.notEqual(resolveHome({ DSH_HOME: '  ' }), '  ')
+  it('prefers DSH_HOME, normalized the way the harness normalizes it', () => {
+    const absolute = join(tmpdir(), 'x', 'dsh')
+    assert.equal(resolveHome({ DSH_HOME: absolute }), absolute)
+    // A relative override is resolved against cwd, never returned raw.
+    assert.equal(resolveHome({ DSH_HOME: 'relative-dsh' }), resolve('relative-dsh'))
+  })
+
+  it('expands a ~-prefixed override rather than creating a literal ~ directory', () => {
+    assert.equal(resolveHome({ DSH_HOME: '~' }), resolve(homedir()))
+    assert.equal(resolveHome({ DSH_HOME: join('~', 'custom-dsh') }), join(homedir(), 'custom-dsh'))
+  })
+
+  it('treats a whitespace-only override as unset and falls back to ~/.dsh', () => {
+    const blank = resolveHome({ DSH_HOME: '  ' })
+    assert.notEqual(blank, '  ')
+    assert.equal(blank, join(homedir(), '.dsh'))
     assert.ok(resolveHome({}).endsWith('.dsh'))
   })
 })
