@@ -87,3 +87,8 @@ toggle list on the next state refresh — no plugin update required.
 ```sh
 npm test   # state normalization/persistence, request rejection, provider join
 ```
+
+## License
+
+MIT — do whatever you like with it; no warranty, no liability. See the
+[MIT license text](https://opensource.org/licenses/MIT).
