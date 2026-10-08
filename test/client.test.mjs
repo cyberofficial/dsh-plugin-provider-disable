@@ -211,6 +211,35 @@ maybe('client bundle', () => {
     assert.equal(marked.getAttribute('data-provider-disable-off'), 'true', 'late-rendered disabled group is hidden')
   })
 
+  it('rescues focus off a section before hiding it (selected provider disabled)', async () => {
+    const { exports, window } = boot(structuredClone(initialState))
+    const { ctx } = fakeContext()
+    exports.apply(ctx)
+    await sleep(10)
+    const { document } = window
+
+    const menu = document.createElement('div')
+    menu.setAttribute('role', 'menu')
+    menu.innerHTML =
+      '<section role="group" aria-labelledby=":r8q:-deepseek-official"><div class="groupTitle">DeepSeek</div><button role="menuitemradio" title="DeepSeek-V4"></button></section>' +
+      '<section role="group" aria-labelledby=":r8q:-nvidia"><div class="groupTitle">nvidia</div><button role="menuitemradio" title="Kimi K3" aria-checked="true"></button></section>'
+    document.body.appendChild(menu)
+    // The picker's drill-in focuses the row of the model in use; that row is
+    // inside the group this state marks disabled.
+    const current = document.querySelector('button[title="Kimi K3"]')
+    current.focus()
+    assert.equal(document.activeElement, current, 'focused row sits in the disabled group')
+    await sleep(250)
+
+    const section = document.querySelector('section[aria-labelledby=":r8q:-nvidia"]')
+    assert.equal(section.getAttribute('data-provider-disable-off'), 'true', 'group is hidden')
+    assert.equal(
+      document.activeElement?.getAttribute('title'),
+      'DeepSeek-V4',
+      'focus lands on a visible row instead of dropping to <body>',
+    )
+  })
+
   it('does not hide an enabled provider whose id ends with a disabled id', async () => {
     const state = {
       providers: [
